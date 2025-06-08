@@ -24,7 +24,7 @@ import sys
 import shutil
 from contextlib import nullcontext
 from pathlib import Path
-
+from tqdm import tqdm
 import accelerate
 import datasets
 import numpy as np
@@ -184,6 +184,13 @@ def parse_args():
         default=None,
         required=True,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
+    )
+    parser.add_argument(
+        "--pretrained_unet_name_or_path",
+        type=str,
+        default=None,
+        required=True,
+        help="Path to pretrained UNet or model identifier from huggingface.co/models.",
     )
     parser.add_argument(
         "--use_LLM_feedback",
@@ -595,7 +602,7 @@ def main():
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant=args.variant
     )
     unet = UNet2DConditionModel.from_pretrained(
-        args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision
+        args.pretrained_unet_name_or_path, subfolder="unet", revision=args.non_ema_revision
     )
 
     # InstructPix2Pix uses an additional image for conditioning. To accommodate that,
@@ -966,9 +973,16 @@ def main():
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             images = batch["original_pixel_values"]
+            target_images = batch["edited_pixel_values"]
+            
             org_batch = ((images+1)/2 * 255).to(torch.uint8)
             org_batch = org_batch.permute(0, 2, 3, 1).cpu().numpy()
             pils_batch = [Image.fromarray(image).convert("RGB") for image in org_batch]
+            
+            tar_batch = ((target_images+1)/2 * 255).to(torch.uint8)
+            tar_batch = tar_batch.permute(0, 2, 3, 1).cpu().numpy()
+            tar_pils_batch = [Image.fromarray(tar_image).convert("RGB") for tar_image in tar_batch]
+            
             input_ids_batch = batch["input_ids"]
             
             # Skip steps until we reach the resumed step
@@ -1059,22 +1073,24 @@ def main():
 
                     with autocast_ctx:
                         temp_desc_loss = 0
-                        for i in range(len(pils_batch)):
+                        for i in tqdm(range(len(pils_batch))):
                             input_image = pils_batch[i]
+                            target_image = tar_pils_batch[i]
                             index = int(input_ids_batch[i])
                             edit_prompt = dataset["train"][index][args.edit_prompt_column]
-                            target_prompt = dataset["train"][index][args.target_prompt_column]
+                            # target_prompt = dataset["train"][index][args.target_prompt_column]
                             
                             image = pipeline(
                                 prompt=edit_prompt,
                                 image=input_image,
                                 num_inference_steps=20,
+                                image_guidance_scale=1.5,
                                 guidance_scale=10,
-                                strength=0.75,
                                 num_images_per_prompt=1,
                             ).images[0]
                             pil_img = image.convert("RGB")
                             pil_img_list_form = [pil_img]
+                            tar_img_list_form = [target_image]
                             
                             #get scene graph
                             # scenegraph_output = inference_one_image_get_scenegraph_only(scengraph_model, pil_img)
@@ -1082,7 +1098,24 @@ def main():
                             
                             #create LLM prompt
                             # llm_prompt = "Based on the given image <image>\n, Analyze the image in extreme detail and describe everything visible in a single, coherent paragraph. Should describe mostly based on the image. Additional information also should be used as reference: " + scenegraph_output
-                            llm_prompt = "<image>\n Please describe this image in a detailed and comprehensive paragraph. Mention all visible objects, their relative positions, and any noticeable actions or interactions. Include descriptions of the background, setting (indoor or outdoor), lighting, colors, and materials. Comment on the mood or atmosphere, possible time of day, and any cultural or contextual significance. Use vivid language and full sentences, as if explaining the image to someone who cannot see it."
+                            llm_prompt = f'''<image> \n
+                                            You are a meticulous visual analyst. Carefully examine the given image and describe it in a single, flowing paragraph (maximum 520 tokens). Focus on every visually observable detail—such as color, texture, material, size, shape, and spatial relationships. Do not use bullet points or lists.
+                                            Avoid assumptions or inferences about unseen factors (e.g., time of day, season, emotions, story). Describe only what is directly visible in the image.
+                                            Your paragraph must naturally include the following:
+                                            - A clear overview of the setting (e.g., indoor/outdoor, environment type, lighting conditions, background elements, overall mood)
+                                            - Detailed description of each major object: its appearance, color, material (wood, metal, fabric, etc.), texture (smooth, rough, shiny, soft, etc.), size (relative to others), and spatial position (e.g., foreground, center-left)
+                                            - If humans or animals are present, describe each individual separately in full detail. Include:
+                                                - Hair, face, visible skin or fur, and accessories
+                                                - Clothing (color, texture, material, style, condition)
+                                                - Pose: the orientation and position of every visible body part (head, arms, legs, torso, hands, feet)
+                                                - Describe their stance or motion only if clearly visible, grounded in what is seen
+                                            - For images with multiple people or animals, ensure each is described distinctly and thoroughly, woven into the flow of the paragraph
+                                            - Describe all supporting/background elements such as furniture, walls, ground, vegetation, or objects in the distance
+                                            - Clearly express spatial relationships between elements (e.g., in front of, behind, next to, overlapping, under)
+                                            - You must explicitly describe the visual features of each object or region targeted in the editing instruction: "{edit_prompt}", separately. For example, if the instruction is "The girl bent and raised her two hands," then describe: The girl posture (e.g., leaning forward, bent knees) and The position and gesture of her hands (e.g., raised above shoulders, palms open)
+                                            Use vivid, sensory-rich language. Every detail must be grounded in what can actually be seen. Avoid summarizing—immerse the reader in a scene constructed entirely from the image visible content.
+                                            '''
+                            
                             conversation = [
                                 {
                                     "role": "<|User|>",
@@ -1098,6 +1131,13 @@ def main():
                                 system_prompt=""
                             ).to(vl_gpt.device)
                             
+                            prepare_inputs_tar = vl_chat_processor(
+                                conversations=conversation,
+                                images=tar_img_list_form,
+                                force_batchify=True,
+                                system_prompt=""
+                            ).to(vl_gpt.device)
+                            
                             inputs_embeds = vl_gpt.prepare_inputs_embeds(**prepare_inputs)
                             outputs = vl_gpt.language.generate(
                                 inputs_embeds=inputs_embeds,
@@ -1105,21 +1145,36 @@ def main():
                                 pad_token_id=tokenizer_llm.eos_token_id,
                                 bos_token_id=tokenizer_llm.bos_token_id,
                                 eos_token_id=tokenizer_llm.eos_token_id,
-                                max_new_tokens=512,
+                                max_new_tokens=256,
                                 do_sample=False,
                                 use_cache=True
                             )
                             image_description = [tokenizer_llm.decode(output.cpu().tolist(), skip_special_tokens=True) for output in outputs]
-                            # print(image_description)
-                            # print("---------------------------")
-                            # print(target_prompt)
                             
-                            embeddings1 = embedding_sentence_model.encode(target_prompt, convert_to_tensor=True, show_progress_bar=False)
+                            inputs_embeds_tar = vl_gpt.prepare_inputs_embeds(**prepare_inputs_tar)
+                            tar_outputs = vl_gpt.language.generate(
+                                inputs_embeds=inputs_embeds_tar,
+                                attention_mask=prepare_inputs_tar.attention_mask,
+                                pad_token_id=tokenizer_llm.eos_token_id,
+                                bos_token_id=tokenizer_llm.bos_token_id,
+                                eos_token_id=tokenizer_llm.eos_token_id,
+                                max_new_tokens=256,
+                                do_sample=False,
+                                use_cache=True
+                            )
+                            target_image_description = [tokenizer_llm.decode(tar_output.cpu().tolist(), skip_special_tokens=True) for tar_output in tar_outputs]
+                            
+                            # print(image_description)
+                            # print(target_image_description)
+                            # print("---------------------------")
+                            
+                            
+                            embeddings1 = embedding_sentence_model.encode(target_image_description, convert_to_tensor=True, show_progress_bar=False)
                             embeddings2 = embedding_sentence_model.encode(image_description, convert_to_tensor=True, show_progress_bar=False)
 
-                            similarity = util.pytorch_cos_sim(embeddings1, embeddings2)
-                            # print(similarity)
-                            description_loss_per_one = 1 - similarity.item()
+                            similarity = util.cos_sim(embeddings1, embeddings2).item()
+                            description_loss_per_one = 1 - similarity
+                            # print(description_loss_per_one)
                             temp_desc_loss += description_loss_per_one
                             
                         desc_loss = temp_desc_loss / len(pils_batch)

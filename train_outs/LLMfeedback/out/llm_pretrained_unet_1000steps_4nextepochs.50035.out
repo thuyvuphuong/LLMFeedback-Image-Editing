@@ -1,0 +1,20 @@
+/work/20010751/SemanticEditing/pretrained_frameworks/SceneGraph/egtr/model/custom_kernel
+loading annotations into memory...
+Done (t=0.13s)
+creating index...
+index created!
+Python version is above 3.10, patching the collections module.
+Add pad token = ['<｜▁pad▁｜>'] to the tokenizer
+<｜▁pad▁｜>:2
+Add image token = ['<image>'] to the tokenizer
+<image>:128815
+Add grounding-related tokens = ['<|ref|>', '<|/ref|>', '<|det|>', '<|/det|>', '<|grounding|>'] to the tokenizer with input_ids
+<|ref|>:128816
+<|/ref|>:128817
+<|det|>:128818
+<|/det|>:128819
+<|grounding|>:128820
+Add chat tokens = ['<|User|>', '<|Assistant|>'] to the tokenizer with input_ids
+<|User|>:128821
+<|Assistant|>:128822
+

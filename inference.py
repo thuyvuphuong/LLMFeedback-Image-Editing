@@ -1,28 +1,21 @@
 #%%
 import PIL
 import torch
+import matplotlib.pyplot as plt
 from diffusers import (
     StableDiffusionInstructPix2PixPipeline,
     DPMSolverMultistepScheduler,
     UNet2DConditionModel,
     EulerAncestralDiscreteScheduler
 )
-import matplotlib.pyplot as plt
 
 #%%
+torch.cuda.set_device(5)
 # Load main pipeline
-model_id = "pretrained_frameworks/pretrained_IEDMs/instruct-pix2pix"
+model_id = "finetuned_models/ip2p_nollm_res256_lr5e-5_pretrained_unet_1000steps_13laststeps"
 pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(model_id, torch_dtype=torch.float16).to("cuda")
 pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
-
-#%%
-# Override safety checker and scheduler
-# pipe.safety_checker = lambda images, clip_input: (images, [False])
-# pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
-
-# Load UNet from a different path
-# new_unet_path = "pretrained_frameworks/pretrained_IEDMs/magicbrush-jul7/unet"
-# pipe.unet = UNet2DConditionModel.from_pretrained(new_unet_path, torch_dtype=torch.float16).to("cuda")
+# pipe.unet = UNet2DConditionModel.from_pretrained("finetuned_models/ip2p_nollm_res256_lr5e-4/checkpoint-1000/unet", torch_dtype=torch.float16).to("cuda")
 
 # Image preparation
 generator = torch.Generator("cuda").manual_seed(0)
@@ -39,7 +32,7 @@ image = load_image(image_path)
 #%%
 # Inference
 prompt = "The girl's hands were not flat on the bench"
-num_inference_steps = 20
+num_inference_steps = 10
 image_guidance_scale = 1.5
 guidance_scale = 10
 
