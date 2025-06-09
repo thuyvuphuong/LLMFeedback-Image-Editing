@@ -30,6 +30,176 @@ def register_hooks(model, layers_to_hook):
         handles.append(m.register_forward_hook(save_activation(name)))
     return handles
 
+def get_saliency_masks_of_batch(
+    ACTIVATIONS,
+    resolutions,
+    exclude_indices=None,
+    mask_threshold=0.5,
+):
+    """
+    Returns a list of binary masks (one per image in batch) from the mean saliency map,
+    thresholded at mask_threshold.
+    - ACTIVATIONS: dict of {name: activation} as usual, but each activation has a batch dim.
+    - resolutions: [(H, W), ...] list of output mask shapes for each image, or a single (H, W) for all.
+    - exclude_indices: list/set/tuple of indices to skip in mean computation (default None)
+    """
+
+    # Determine batch size from any activation
+    sample_act = next(iter(ACTIVATIONS.values()))
+    batch_size = sample_act.grad.shape[0]
+
+    # Handle single resolution for all images
+    if isinstance(resolutions, tuple):
+        resolutions = [resolutions] * batch_size
+
+    masks = []
+    for b in range(batch_size):
+        saliency_maps = []
+        for name, act in ACTIVATIONS.items():
+            if not hasattr(act, "grad") or act.grad is None:
+                continue
+            grad_mean = act.grad.mean(dim=1, keepdim=True).cpu()
+            grad_map = grad_mean[b, 0].detach().cpu().numpy()
+
+            if grad_map.size == 0 or np.isnan(grad_map).any() or np.isinf(grad_map).any():
+                continue
+
+            grad_map = grad_map - np.min(grad_map)
+            max_grad = np.max(grad_map)
+            if max_grad != 0:
+                grad_map = grad_map / max_grad
+            else:
+                grad_map = np.zeros_like(grad_map)
+
+            H_img, W_img = resolutions[b]
+            grad_map_resized = cv2.resize(grad_map.astype(np.float32), (W_img, H_img), interpolation=cv2.INTER_CUBIC)
+            saliency_maps.append(grad_map_resized)
+
+        mask = None
+        if saliency_maps:
+            indices = list(range(len(saliency_maps)))
+            if exclude_indices is not None:
+                indices = [i for i in indices if i not in set(exclude_indices)]
+            if not indices:
+                raise ValueError("All saliency maps were excluded from mean computation.")
+            filtered_maps = [saliency_maps[i] for i in indices]
+
+            mean_saliency = np.mean(np.stack(filtered_maps), axis=0)
+            max_val = np.max(mean_saliency)
+            threshold = mask_threshold * max_val
+            mask = (mean_saliency >= threshold).astype(np.uint8) * 255
+
+        masks.append(mask)
+    return masks
+
+
+def get_first_saliency_mask_of_batch(
+    ACTIVATIONS,
+    input_image,
+    folder_name=None,
+    root_folder=None,
+    exclude_indices=None,
+    save=False,
+    mask_threshold=0.5,
+):
+    """
+    Saves input image and saliency overlays (one per block) to a unique folder inside root_folder.
+    Additionally, saves the mean saliency map overlay and its binary mask.
+    Optionally, exclude certain block indices from the mean saliency computation.
+    - input_image can be a PIL Image or numpy array [H,W,3], uint8.
+    - Each block's saliency overlay is saved as {block}_saliency_overlay.png.
+    - The input image is saved as input.png.
+    - The mean saliency overlay is saved as mean_saliency_overlay.png.
+    - The binary mask is saved as mean_saliency_mask.png.
+    - root_folder/folder_name/ is created if it does not exist.
+    - exclude_indices: list/set/tuple of indices to skip in mean computation (default None)
+    """
+    # Check save mode and path validity
+    if save:
+        if root_folder is None or folder_name is None:
+            raise ValueError("Saving is enabled, but root_folder and folder_name must be provided.")
+        output_dir = os.path.join(root_folder, folder_name)
+        os.makedirs(output_dir, exist_ok=True)
+    else:
+        output_dir = None  # Not used if not saving
+
+    # Convert PIL Image to numpy if needed
+    if hasattr(input_image, 'size'):  # PIL Image
+        input_image = np.array(input_image)
+    # If grayscale, convert to 3-channel
+    if input_image.ndim == 2:
+        input_image = cv2.cvtColor(input_image, cv2.COLOR_GRAY2BGR)
+    elif input_image.shape[2] == 4:  # RGBA to BGR
+        input_image = cv2.cvtColor(input_image, cv2.COLOR_RGBA2BGR)
+
+    if input_image.dtype != np.uint8:
+        input_image = np.clip(input_image, 0, 255).astype(np.uint8)
+
+    H_img, W_img = input_image.shape[:2]
+
+    # Save input image
+    if save:
+        input_bgr = cv2.cvtColor(input_image, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(os.path.join(output_dir, "input.png"), input_bgr)
+
+    saliency_maps = []
+    names = []
+    for name, act in ACTIVATIONS.items():
+        if not hasattr(act, "grad") or act.grad is None:
+            continue
+        grad_mean = act.grad.mean(dim=1, keepdim=True).cpu()
+        grad_map = grad_mean[0, 0].detach().cpu().numpy()
+
+        if grad_map.size == 0 or np.isnan(grad_map).any() or np.isinf(grad_map).any():
+            print(f"Warning: grad_map for {name} is invalid, skipping.")
+            continue
+
+        grad_map = grad_map - np.min(grad_map)
+        max_grad = np.max(grad_map)
+        if max_grad != 0:
+            grad_map = grad_map / max_grad
+        else:
+            grad_map = np.zeros_like(grad_map)
+
+        grad_map_resized = cv2.resize(grad_map.astype(np.float32), (W_img, H_img), interpolation=cv2.INTER_CUBIC)
+        saliency_maps.append(grad_map_resized)
+        names.append(name)
+
+        grad_map_colored = cv2.applyColorMap(np.uint8(255 * grad_map_resized), cv2.COLORMAP_JET)
+        overlay = cv2.addWeighted(cv2.cvtColor(input_image, cv2.COLOR_RGB2BGR), 0.6, grad_map_colored, 0.4, 0)
+        if save:
+            cv2.imwrite(os.path.join(output_dir, f"{name}_saliency_overlay.png"), overlay)
+
+    mask = None
+    if saliency_maps:
+        indices = list(range(len(saliency_maps)))
+        if exclude_indices is not None:
+            indices = [i for i in indices if i not in set(exclude_indices)]
+        if not indices:
+            raise ValueError("All saliency maps were excluded from mean computation.")
+        filtered_maps = [saliency_maps[i] for i in indices]
+
+        mean_saliency = np.mean(np.stack(filtered_maps), axis=0)
+        mean_saliency_vis = mean_saliency - np.min(mean_saliency)
+        max_mean = np.max(mean_saliency_vis)
+        if max_mean != 0:
+            mean_saliency_vis = mean_saliency_vis / max_mean
+        else:
+            mean_saliency_vis = np.zeros_like(mean_saliency)
+
+        mean_saliency_colored = cv2.applyColorMap(np.uint8(255 * mean_saliency_vis), cv2.COLORMAP_JET)
+        mean_overlay = cv2.addWeighted(cv2.cvtColor(input_image, cv2.COLOR_RGB2BGR), 0.6, mean_saliency_colored, 0.4, 0)
+        if save:
+            cv2.imwrite(os.path.join(output_dir, "mean_saliency_overlay.png"), mean_overlay)
+
+        max_val = np.max(mean_saliency)
+        threshold = mask_threshold * max_val
+        mask = (mean_saliency >= threshold).astype(np.uint8) * 255
+        if save:
+            mask_path = os.path.join(output_dir, "mean_saliency_mask.png")   
+            cv2.imwrite(mask_path, mask)
+    return mask
+
 def compute_saliency_map(input_image, model, target_layer, target_idx=None):
     """
     Args:
@@ -56,103 +226,3 @@ def compute_saliency_map(input_image, model, target_layer, target_idx=None):
     for h in handles:
         h.remove()
     return saliency, activation
-
-import os
-import numpy as np
-import cv2
-
-def overlay_saliency_on_image(
-    ACTIVATIONS,
-    input_image,
-    folder_name="sample_1",
-    root_folder="all_samples"
-):
-    """
-    Saves input image and saliency overlays (one per block) to a unique folder inside root_folder.
-    - input_image can be a PIL Image or numpy array [H,W,3], uint8.
-    - Each block's saliency overlay is saved as {block}_saliency_overlay.png.
-    - The input image is saved as input.png.
-    - root_folder/folder_name/ is created if it does not exist.
-    """
-    output_dir = os.path.join(root_folder, folder_name)
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Convert PIL Image to numpy if needed
-    if hasattr(input_image, 'size'):  # PIL Image
-        input_image = np.array(input_image)
-    # If grayscale, convert to 3-channel
-    if input_image.ndim == 2:
-        input_image = cv2.cvtColor(input_image, cv2.COLOR_GRAY2BGR)
-    elif input_image.shape[2] == 4:  # RGBA to BGR
-        input_image = cv2.cvtColor(input_image, cv2.COLOR_RGBA2BGR)
-
-    H_img, W_img = input_image.shape[:2]
-
-    # Save input image
-    input_bgr = cv2.cvtColor(input_image, cv2.COLOR_RGB2BGR)
-    cv2.imwrite(os.path.join(output_dir, "input.png"), input_bgr)
-
-    for name, act in ACTIVATIONS.items():
-        if act.grad is None:
-            continue
-        grad_mean = act.grad.mean(dim=1, keepdim=True).cpu()
-        grad_map = grad_mean[0, 0].detach().cpu().numpy()  # [H, W]
-
-        # Defensive checks
-        if grad_map.size == 0 or np.isnan(grad_map).any() or np.isinf(grad_map).any():
-            print(f"Warning: grad_map for {name} is invalid, skipping.")
-            continue
-
-        # Normalize to [0, 1]
-        grad_map = grad_map - np.min(grad_map)
-        if np.max(grad_map) != 0:
-            grad_map = grad_map / np.max(grad_map)
-        else:
-            grad_map = np.zeros_like(grad_map)
-
-        # Resize to input_image size
-        grad_map_resized = cv2.resize(grad_map.astype(np.float32), (W_img, H_img), interpolation=cv2.INTER_CUBIC)
-
-        # Apply Jet colormap
-        grad_map_colored = cv2.applyColorMap(np.uint8(255 * grad_map_resized), cv2.COLORMAP_JET)
-        # Overlay: blend with input image
-        overlay = cv2.addWeighted(input_image, 0.6, grad_map_colored, 0.4, 0)
-        # Save overlay
-        cv2.imwrite(os.path.join(output_dir, f"{name}_saliency_overlay.png"), overlay)        
-
-def save_first_sample_mean_images(ACTIVATIONS, concatenated_noisy_latents, save_dir="output_maps_cv2"):
-    """
-    For each activation in ACTIVATIONS:
-      - Compute mean over channels, shape: [B, 1, H, W]
-      - Take the first sample [1, H, W]
-      - Repeat along channel to [C, H, W], where C=concatenated_noisy_latents.shape[1]
-      - For each channel, normalize to [0,255] and save as PNG using cv2
-    Same for saliency (grad) if present.
-    """
-    os.makedirs(save_dir, exist_ok=True)
-    C = concatenated_noisy_latents.shape[1]
-
-    for name, act in ACTIVATIONS.items():
-        # Activation mean: [B, 1, H, W]
-        act_mean = act.mean(dim=1, keepdim=True).cpu()
-        first_act = act_mean[0]  # [1, H, W]
-        first_act_repeated = first_act.repeat(C, 1, 1)  # [C, H, W]
-        # Save each channel as a grayscale image
-        for ch in range(C):
-            arr = first_act_repeated[ch].detach().cpu().numpy()
-            arr = (arr - arr.min()) / (arr.max() - arr.min() + 1e-8)  # Normalize to [0,1]
-            arr = (arr * 255).astype(np.uint8)
-            filename = os.path.join(save_dir, f"{name}_activation_ch{ch}.png")
-            cv2.imwrite(filename, arr)
-
-        # Saliency mean (if grad exists)
-        if act.grad is not None:
-            grad_mean = act.grad.mean(dim=1, keepdim=True).cpu()
-            first_grad = grad_mean[0]
-            first_grad_repeated = first_grad.repeat(C, 1, 1)
-            for ch in range(C):
-                arr = first_grad_repeated[ch].numpy()
-                arr = (arr - arr.min()) / (arr.max() - arr.min() + 1e-8)
-                arr = (arr * 255).astype(np.uint8)
-                filename = os.path.join(save_dir, f"{name}_saliency_ch{ch}.png")
-                cv2.imwrite(filename, arr)

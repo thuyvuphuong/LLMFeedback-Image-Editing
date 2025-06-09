@@ -1,6 +1,8 @@
 #%%
 import numpy as np
 import PIL
+import os
+import sys
 import torch
 import matplotlib.pyplot as plt
 from torchvision.utils import make_grid
@@ -13,17 +15,28 @@ from diffusers import (
 )
 import torch.nn.functional as F
 
+current_dir = os.getcwd()
+parent_dir = os.path.dirname(current_dir)
+finetuned_models_path = os.path.join(parent_dir, 'finetuned_models')
+if finetuned_models_path not in sys.path:
+    sys.path.insert(0, finetuned_models_path)
+    
 #%%
-torch.cuda.set_device(5)
-# Load main pipeline
-model_id = "finetuned_models/ip2p_nollm_res256_lr5e-5_pretrained_unet_1000steps_13laststeps"
-pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(model_id, torch_dtype=torch.float16).to("cuda")
+torch.cuda.set_device(6)
+# Model directory name (relative to finetuned_models)
+model_id = "ip2p_nollm_res256_lr5e-5_pretrained_unet_1000steps_13laststeps"
+
+# Full path to the model directory
+model_path = os.path.join(finetuned_models_path, model_id)
+
+# Load main pipeline from the correct folder
+pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(model_path, torch_dtype=torch.float16).to("cuda")
 pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
 
 #%%
 # Image preparation
 generator = torch.Generator("cuda").manual_seed(0)
-image_path = "test_imgs/org.jpg"
+image_path = "image_org.jpg"
 
 def load_image(img_path):
     image = PIL.Image.open(img_path)
@@ -66,7 +79,7 @@ for p in pipe.unet.parameters():
     
 # %%
 # Inference
-prompt = "The girl's hands were not flat on the bench"
+prompt = "Let the red panda raise its paws"
 num_inference_steps = 10
 image_guidance_scale = 1.5
 guidance_scale = 10

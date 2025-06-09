@@ -58,7 +58,7 @@ from diffusers.utils.torch_utils import is_compiled_module
 from transformers import AutoModelForCausalLM
 from PIL import Image
 from sentence_transformers import SentenceTransformer, util
-from activation_saliency_utils import register_hooks, compute_saliency_map, ACTIVATIONS, save_first_sample_mean_images, overlay_saliency_on_image
+from activation_saliency_utils import get_saliency_masks_of_batch, register_hooks
 
 #import libraries for SceneGraph
 from glob import glob
@@ -271,7 +271,7 @@ def parse_args():
     parser.add_argument(
         "--editing_mask_column",
         type=str,
-        default="MASK",
+        default="MASK_IMG",
         help="The column of the dataset containing the edit mask.",
     )
     parser.add_argument(
@@ -516,10 +516,15 @@ def parse_args():
 
     return args
 
-
 def convert_to_np(image, resolution):
     image = image.convert("RGB").resize((resolution, resolution))
     return np.array(image).transpose(2, 0, 1)
+
+def convert_org_mask_to_binary(org_mask, resolution):
+    mask = org_mask.convert("RGB").resize((resolution, resolution))
+    gray_img = mask.convert("L")
+    binary_img = gray_img.point(lambda x: 255 if x == 0 else 0, '1')
+    return np.array(binary_img)
 
 
 def download_image(url):
@@ -606,10 +611,17 @@ def main():
         args.pretrained_unet_name_or_path, subfolder="unet", revision=args.non_ema_revision
     )
     
-    main_blocks = [f"down_blocks.{i}" for i in range(len(unet.down_blocks))] + \
-              ["mid_block"] + \
-              [f"up_blocks.{i}" for i in range(len(unet.up_blocks))]
-    handles = register_hooks(unet, main_blocks)
+    layers_to_hook = [
+        "down_blocks.0",
+        "down_blocks.1",
+        "down_blocks.2",
+        "down_blocks.3",
+        "mid_block",
+        "up_blocks.0",
+        "up_blocks.1",
+        "up_blocks.2",
+        "up_blocks.3"
+    ]
 
     # InstructPix2Pix uses an additional image for conditioning. To accommodate that,
     # it uses 8 channels (instead of 4) in the first (conv) layer of the UNet. This UNet is
@@ -785,6 +797,7 @@ def main():
             raise ValueError(
                 f"--edit_prompt_column' value '{args.edit_prompt_column}' needs to be one of: {', '.join(column_names)}"
             )
+            
     if args.edited_image_column is None:
         edited_image_column = dataset_columns[10] if dataset_columns is not None else column_names[10]
     else:
@@ -792,6 +805,15 @@ def main():
         if edited_image_column not in column_names:
             raise ValueError(
                 f"--edited_image_column' value '{args.edited_image_column}' needs to be one of: {', '.join(column_names)}"
+            )
+            
+    if args.editing_mask_column is None:
+        editing_mask_column = dataset_columns[9] if dataset_columns is not None else column_names[9]
+    else:
+        editing_mask_column = args.editing_mask_column
+        if editing_mask_column not in column_names: 
+            raise ValueError(
+                f"--editing_mask_column' value '{args.editing_mask_column}' needs to be one of: {', '.join(column_names)}"
             )
     
     # Preprocessing the datasets.
@@ -817,16 +839,23 @@ def main():
         edited_images = np.concatenate(
             [convert_to_np(image, args.resolution) for image in examples[edited_image_column]]
         )
+        mask_values = np.concatenate(
+            [convert_org_mask_to_binary(mask, args.resolution) for mask in examples[editing_mask_column]]
+        )
+        mask_values = np.stack(mask_values)
+        mask_values = torch.tensor(mask_values, dtype=torch.float32)
+        
         # We need to ensure that the original and the edited images undergo the same
         # augmentation transforms.
         images = np.stack([original_images, edited_images])
         images = torch.tensor(images)
         images = 2 * (images / 255) - 1
-        return train_transforms(images)
+        return train_transforms(images), mask_values
+    
 
     def preprocess_train(examples):
         # Preprocess images.
-        preprocessed_images = preprocess_images(examples)
+        preprocessed_images, preprocessed_masks = preprocess_images(examples)
 
         original_images, edited_images = preprocessed_images
         original_images = original_images.reshape(-1, 3, args.resolution, args.resolution)
@@ -835,6 +864,7 @@ def main():
         # Collate the preprocessed images into the `examples`.
         examples["original_pixel_values"] = original_images
         examples["edited_pixel_values"] = edited_images
+        examples["mask_values"] = preprocessed_masks
 
         # Preprocess the captions.
         edit_promtps = list(examples[edit_prompt_column])
@@ -855,12 +885,15 @@ def main():
         original_pixel_values = original_pixel_values.to(memory_format=torch.contiguous_format).float()
         edited_pixel_values = torch.stack([example["edited_pixel_values"] for example in examples])
         edited_pixel_values = edited_pixel_values.to(memory_format=torch.contiguous_format).float()
+        mask_pixel_values = torch.stack([example["mask_values"] for example in examples])
+        mask_pixel_values = mask_pixel_values.to(memory_format=torch.contiguous_format).float()
         edit_prompts = torch.stack([example["edit_prompts"] for example in examples])
         input_ids = torch.tensor([example["input_ids"] for example in examples])
         return {
             "input_ids": input_ids,
             "original_pixel_values": original_pixel_values,
             "edited_pixel_values": edited_pixel_values,
+            "mask_pixel_values": mask_pixel_values,
             "edit_prompts": edit_prompts,
         }
 
@@ -897,6 +930,9 @@ def main():
     unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
         unet, optimizer, train_dataloader, lr_scheduler
     )
+    global ACTIVATIONS
+    ACTIVATIONS = {}
+    hook_handles = register_hooks(unet, layers_to_hook)
 
     if args.use_ema:
         ema_unet.to(accelerator.device)
@@ -980,6 +1016,8 @@ def main():
         for step, batch in enumerate(train_dataloader):
             images = batch["original_pixel_values"]
             target_images = batch["edited_pixel_values"]
+            mask = batch["mask_pixel_values"]
+            print(mask.shape)
             
             org_batch = ((images+1)/2 * 255).to(torch.uint8)
             org_batch = org_batch.permute(0, 2, 3, 1).cpu().numpy()
@@ -1196,20 +1234,19 @@ def main():
 
                 # Backpropagate
                 accelerator.backward(loss)
+                resolution = (args.resolution, args.resolution)
+                print("ACTIVATIONS:", ACTIVATIONS.keys())
+                if len(ACTIVATIONS) == 0:
+                    raise RuntimeError("No activations captured! Check your hooks and layer names.")
+                masks = get_saliency_masks_of_batch(
+                    ACTIVATIONS,
+                    resolutions=resolution,
+                    exclude_indices=None,
+                    mask_threshold=0.5,
+                )
+                ACTIVATIONS.clear()
                 
-                activation_means = {}
-                saliency_means = {}
-                fold_name = f"{dataset["train"][int(input_ids_batch[0])][args.edit_prompt_column]}_step{timesteps[0]}"
-                overlay_saliency_on_image(ACTIVATIONS, pils_batch[0], root_folder="saliency_overlays", folder_name=fold_name)
-                for name, act in ACTIVATIONS.items():
-                    # Activation mean
-                    activation_means[name] = act.mean(dim=1, keepdim=True).cpu()
-                    # Saliency mean (if grad exists)
-                    if act.grad is not None:
-                        saliency_means[name] = act.grad.mean(dim=1, keepdim=True).cpu()
-                    else:
-                        saliency_means[name] = None
-                
+                print(masks.shape)
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
                 optimizer.step()

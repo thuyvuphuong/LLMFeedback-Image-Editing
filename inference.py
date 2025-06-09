@@ -15,7 +15,7 @@ torch.cuda.set_device(5)
 model_id = "finetuned_models/ip2p_nollm_res256_lr5e-5_pretrained_unet_1000steps_13laststeps"
 pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(model_id, torch_dtype=torch.float16).to("cuda")
 pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
-# pipe.unet = UNet2DConditionModel.from_pretrained("finetuned_models/ip2p_nollm_res256_lr5e-4/checkpoint-1000/unet", torch_dtype=torch.float16).to("cuda")
+pipe.unet = UNet2DConditionModel.from_pretrained("finetuned_models/ip2p_llm_start0.9_des0.5_den0.5_res256_lr5e-4_pretrained_unet_1000steps_4nextepochs/checkpoint-20/unet", torch_dtype=torch.float16).to("cuda")
 
 # Image preparation
 generator = torch.Generator("cuda").manual_seed(0)

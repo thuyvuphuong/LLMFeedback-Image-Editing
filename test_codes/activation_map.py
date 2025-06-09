@@ -13,7 +13,7 @@ from diffusers import (
 )
 
 #%%
-torch.cuda.set_device(5)
+torch.cuda.set_device(2)
 # Load main pipeline
 model_id = "finetuned_models/ip2p_nollm_res256_lr5e-5_pretrained_unet_1000steps_13laststeps"
 pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(model_id, torch_dtype=torch.float16).to("cuda")
@@ -22,7 +22,7 @@ pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
 #%%
 # Image preparation
 generator = torch.Generator("cuda").manual_seed(0)
-image_path = "test_imgs/org.jpg"
+image_path = "test_imgs/resize.jpg"
 
 def load_image(img_path):
     image = PIL.Image.open(img_path)
@@ -61,7 +61,7 @@ for i, block in enumerate(pipe.unet.up_blocks):
     
 #%%
 # Inference
-prompt = "The girl's hands were not flat on the bench"
+prompt = "Let the panda raise its paws"
 num_inference_steps = 10
 image_guidance_scale = 1.5
 guidance_scale = 10

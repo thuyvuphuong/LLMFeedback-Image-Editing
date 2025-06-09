@@ -16,7 +16,7 @@ export DATASET_ID="downloaded_datatset/HumanEdit"
 export OUTPUT_MODEL="finetuned_models/ip2p_llm_start0.9_des0.5_den0.5_res256_lr5e-4_pretrained_unet_1000steps_4nextepochs"
 export TARGET_PROMPT="OUTPUT_CAPTION_BY_LLAMA"
 
-CUDA_VISIBLE_DEVICES="3,4" accelerate launch --mixed_precision="fp16" finetuning_copy.py \
+CUDA_VISIBLE_DEVICES="4" accelerate launch --mixed_precision="fp16" finetuning_copy.py \
  --pretrained_model_name_or_path=$MODEL_NAME \
  --pretrained_unet_name_or_path=$UNET_MODEL_PATH \
  --dataset_name=$DATASET_ID \
