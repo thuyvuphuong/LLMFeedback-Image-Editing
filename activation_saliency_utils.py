@@ -31,10 +31,10 @@ def register_hooks(model, layers_to_hook):
     return handles
 
 def get_saliency_masks_of_batch(
-    ACTIVATIONS,
     resolutions,
     exclude_indices=None,
     mask_threshold=0.5,
+    binary_mask=True
 ):
     """
     Returns a list of binary masks (one per image in batch) from the mean saliency map,
@@ -87,10 +87,15 @@ def get_saliency_masks_of_batch(
             mean_saliency = np.mean(np.stack(filtered_maps), axis=0)
             max_val = np.max(mean_saliency)
             threshold = mask_threshold * max_val
-            mask = (mean_saliency >= threshold).astype(np.uint8) * 255
+            if binary_mask == True:
+                mask = (mean_saliency >= threshold).astype(np.uint8)
+            else:
+                mask = (mean_saliency >= threshold).astype(np.uint8) * 255
+            
 
         masks.append(mask)
-    return masks
+    ACTIVATIONS.clear()
+    return np.array(masks)
 
 
 def get_first_saliency_mask_of_batch(

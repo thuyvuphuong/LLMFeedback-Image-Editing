@@ -200,6 +200,12 @@ def parse_args():
         help="Whether to use LLM feedback or not.",
     )
     parser.add_argument(
+        "--use_localize_loss",
+        type=bool,
+        default=False,
+        help="Whether to use localization loss or not.",
+    )
+    parser.add_argument(
         "--LLM_start_ratio",
         type=float,
         default=0.33,
@@ -533,6 +539,30 @@ def download_image(url):
     image = image.convert("RGB")
     return image
 
+def soft_iou_loss(pred, target, eps=1e-6):
+    # Both pred and target are floats in [0, 1], shape: (B, H, W)
+    intersection = (pred * target).sum(dim=(1, 2))
+    union = (pred + target - pred * target).sum(dim=(1, 2))
+    iou = (intersection + eps) / (union + eps)
+    return 1.0 - iou.mean()
+
+
+def compute_batch_iou(mask1, mask2):
+    # Ensure masks are boolean
+    mask1 = mask1.bool()
+    mask2 = mask2.bool()
+
+    # Compute intersection and union
+    intersection = (mask1 & mask2).float().sum(dim=(1, 2))
+    union = (mask1 | mask2).float().sum(dim=(1, 2))
+
+    # Compute IoU with numerical stability
+    iou = intersection / (union + 1e-8)
+
+    # Clamp values to [0, 1]
+    iou = iou.clamp(0, 1)
+    return iou
+
 
 def main():
     args = parse_args()
@@ -839,11 +869,10 @@ def main():
         edited_images = np.concatenate(
             [convert_to_np(image, args.resolution) for image in examples[edited_image_column]]
         )
-        mask_values = np.concatenate(
+        mask_values = np.stack(
             [convert_org_mask_to_binary(mask, args.resolution) for mask in examples[editing_mask_column]]
         )
-        mask_values = np.stack(mask_values)
-        mask_values = torch.tensor(mask_values, dtype=torch.float32)
+        mask_values = torch.tensor(mask_values, dtype=torch.int8)
         
         # We need to ensure that the original and the edited images undergo the same
         # augmentation transforms.
@@ -886,7 +915,7 @@ def main():
         edited_pixel_values = torch.stack([example["edited_pixel_values"] for example in examples])
         edited_pixel_values = edited_pixel_values.to(memory_format=torch.contiguous_format).float()
         mask_pixel_values = torch.stack([example["mask_values"] for example in examples])
-        mask_pixel_values = mask_pixel_values.to(memory_format=torch.contiguous_format).float()
+        mask_pixel_values = mask_pixel_values.to(memory_format=torch.contiguous_format).int()
         edit_prompts = torch.stack([example["edit_prompts"] for example in examples])
         input_ids = torch.tensor([example["input_ids"] for example in examples])
         return {
@@ -925,14 +954,13 @@ def main():
         num_warmup_steps=num_warmup_steps_for_scheduler,
         num_training_steps=num_training_steps_for_scheduler,
     )
-
+    
+    hook_handles = register_hooks(unet, layers_to_hook)
+    
     # Prepare everything with our `accelerator`.
     unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
         unet, optimizer, train_dataloader, lr_scheduler
     )
-    global ACTIVATIONS
-    ACTIVATIONS = {}
-    hook_handles = register_hooks(unet, layers_to_hook)
 
     if args.use_ema:
         ema_unet.to(accelerator.device)
@@ -1013,11 +1041,11 @@ def main():
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
         train_loss = 0.0
+        iou_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             images = batch["original_pixel_values"]
             target_images = batch["edited_pixel_values"]
-            mask = batch["mask_pixel_values"]
-            print(mask.shape)
+            mask_label = batch["mask_pixel_values"]
             
             org_batch = ((images+1)/2 * 255).to(torch.uint8)
             org_batch = org_batch.permute(0, 2, 3, 1).cpu().numpy()
@@ -1098,7 +1126,7 @@ def main():
                 
                 denoising_loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
                 
-                if args.use_LLM_feedback and global_step >= llm_start_step:
+                if not args.use_localize_loss and args.use_LLM_feedback and global_step >= llm_start_step:
                     pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
                         args.pretrained_model_name_or_path,
                         unet=unwrap_model(unet),
@@ -1225,7 +1253,12 @@ def main():
                             
                         desc_loss = temp_desc_loss / len(pils_batch)
                         loss = 0.5 * desc_loss + 0.5 * denoising_loss
-                else:
+                        
+                elif args.use_localize_loss and not args.use_LLM_feedback:
+                    loss = 0.5 * denoising_loss + 0.5 * iou_loss
+                    print("Training with localization loss", loss)
+                    
+                elif not args.use_localize_loss and not args.use_LLM_feedback:
                     loss = denoising_loss
                                                 
                 # Gather the losses across all processes for logging (if we use distributed training).
@@ -1235,18 +1268,15 @@ def main():
                 # Backpropagate
                 accelerator.backward(loss)
                 resolution = (args.resolution, args.resolution)
-                print("ACTIVATIONS:", ACTIVATIONS.keys())
-                if len(ACTIVATIONS) == 0:
-                    raise RuntimeError("No activations captured! Check your hooks and layer names.")
-                masks = get_saliency_masks_of_batch(
-                    ACTIVATIONS,
+                saliency_masks = get_saliency_masks_of_batch(
                     resolutions=resolution,
                     exclude_indices=None,
-                    mask_threshold=0.5,
+                    mask_threshold=0.7,
+                    binary_mask=True
                 )
-                ACTIVATIONS.clear()
+                saliency_mask_tensor = torch.tensor(saliency_masks, dtype=torch.int8, device=accelerator.device)
+                iou_loss = soft_iou_loss(saliency_mask_tensor, mask_label)
                 
-                print(masks.shape)
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
                 optimizer.step()

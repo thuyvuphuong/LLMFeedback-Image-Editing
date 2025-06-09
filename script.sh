@@ -22,6 +22,7 @@ CUDA_VISIBLE_DEVICES="4" accelerate launch --mixed_precision="fp16" finetuning_c
  --dataset_name=$DATASET_ID \
  --use_ema \
  --use_LLM_feedback=False --LLM_start_ratio=1 \
+ --use_localize_loss=True \
  --enable_xformers_memory_efficient_attention \
  --resolution=256 --random_flip \
  --train_batch_size=2 --gradient_accumulation_steps=4 --gradient_checkpointing \
