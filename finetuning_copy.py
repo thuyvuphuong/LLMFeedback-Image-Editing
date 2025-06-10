@@ -60,12 +60,15 @@ from PIL import Image
 from sentence_transformers import SentenceTransformer, util
 from activation_saliency_utils import get_saliency_masks_of_batch, register_hooks
 
+output_dir = "test_output"
+os.makedirs(output_dir, exist_ok=True)
+
 #import libraries for SceneGraph
 from glob import glob
 sys.path.append(os.path.abspath('./pretrained_frameworks/SceneGraph/egtr'))
 from model.deformable_detr import DeformableDetrConfig
 from model.egtr import DetrForSceneGraphGeneration
-from get_scenegraph import inference_one_image_get_scenegraph_only
+from test_codes.get_scenegraph import inference_one_image_get_scenegraph_only
 
 #import libraries for LLM
 sys.path.append(os.path.abspath('./pretrained_frameworks/LLMs/DeepSeek-VL2'))
@@ -176,6 +179,8 @@ def log_validation(
                 wandb_table.add_data(wandb.Image(original_image), wandb.Image(edited_image), args.validation_prompt)
             tracker.log({"validation": wandb_table})
 
+def list_of_ints(arg):
+    return list(map(int, arg.split(',')))
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script for InstructPix2Pix.")
@@ -317,6 +322,30 @@ def parse_args():
         help=(
             "For debugging purposes or quicker training, truncate the number of training examples to this "
             "value if set."
+        ),
+    )
+    parser.add_argument(
+        "--mask_threshold",
+        type=float,
+        default=None,
+        help=(
+            "Threshold to get binary mask, range: 0-1"
+        ),
+    )
+    parser.add_argument(
+        "--timestep_threshold",
+        type=int,
+        default=None,
+        help=(
+            "Timestep threshold"
+        ),
+    )
+    parser.add_argument(
+        "--exclude_layers_index_list",
+        type=list_of_ints,
+        default=None,
+        help=(
+            "List of indices of layers excluded from the mean. indices=0,1,2,3,4,5,6,7,8"
         ),
     )
     parser.add_argument(
@@ -992,8 +1021,13 @@ def main():
 
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
+    def sanitize_config(config):
+        return {k: (str(v) if not isinstance(v, (int, float, str, bool, torch.Tensor)) else v)
+                for k, v in config.items()}
+    config = sanitize_config(vars(args))
+    
     if accelerator.is_main_process:
-        accelerator.init_trackers("finetune-semantic", config=vars(args))
+        accelerator.init_trackers("finetune-semantic", config=config)
 
     # Train!
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -1254,28 +1288,42 @@ def main():
                         desc_loss = temp_desc_loss / len(pils_batch)
                         loss = 0.5 * desc_loss + 0.5 * denoising_loss
                         
-                elif args.use_localize_loss and not args.use_LLM_feedback:
-                    loss = 0.5 * denoising_loss + 0.5 * iou_loss
-                    print("Training with localization loss", loss)
+                # elif args.use_localize_loss and not args.use_LLM_feedback:
+                #     loss = 0.5 * denoising_loss + 0.5 * iou_loss
+                #     print("Training with localization loss", loss)
                     
-                elif not args.use_localize_loss and not args.use_LLM_feedback:
-                    loss = denoising_loss
-                                                
+                # elif not args.use_localize_loss and not args.use_LLM_feedback:
+                #     loss = denoising_loss
+                else: 
+                    loss = denoising_loss                           
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
 
                 # Backpropagate
                 accelerator.backward(loss)
+                
                 resolution = (args.resolution, args.resolution)
                 saliency_masks = get_saliency_masks_of_batch(
                     resolutions=resolution,
-                    exclude_indices=None,
-                    mask_threshold=0.7,
+                    exclude_indices=args.exclude_layers_index_list,
+                    mask_threshold=args.mask_threshold,
                     binary_mask=True
                 )
                 saliency_mask_tensor = torch.tensor(saliency_masks, dtype=torch.int8, device=accelerator.device)
-                iou_loss = soft_iou_loss(saliency_mask_tensor, mask_label)
+                timestep_mask = (timesteps < args.timestep_threshold).to(torch.int)
+                timestep_mask_expanded = timestep_mask[:, None, None]
+                
+                saliency_mask_filtered_with_time = saliency_mask_tensor * timestep_mask_expanded
+                mask_label_filtered_with_time = mask_label * timestep_mask_expanded
+                
+                iou_loss = soft_iou_loss(saliency_mask_filtered_with_time, mask_label_filtered_with_time)
+                
+                # saliency_np = saliency_mask_tensor[0].cpu().numpy().astype(np.uint8) * 255
+                # Image.fromarray(saliency_np).save(os.path.join(output_dir, f"{iou_loss}_saliency_mask.jpg"))
+
+                # mask_label_np = mask_label[0].cpu().numpy().astype(np.uint8) * 255
+                # Image.fromarray(mask_label_np).save(os.path.join(output_dir, f"{iou_loss}_mask_label.jpg"))
                 
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)

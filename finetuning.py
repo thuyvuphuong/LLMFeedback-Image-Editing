@@ -64,7 +64,7 @@ from glob import glob
 sys.path.append(os.path.abspath('./pretrained_frameworks/SceneGraph/egtr'))
 from model.deformable_detr import DeformableDetrConfig
 from model.egtr import DetrForSceneGraphGeneration
-from get_scenegraph import inference_one_image_get_scenegraph_only
+from test_codes.get_scenegraph import inference_one_image_get_scenegraph_only
 
 #import libraries for LLM
 sys.path.append(os.path.abspath('./pretrained_frameworks/LLMs/DeepSeek-VL2'))
