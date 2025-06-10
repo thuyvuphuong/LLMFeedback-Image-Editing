@@ -2648,5 +2648,90 @@
         "img_id": "_yrdstGC_rg",
         "edit_prompt": "Change a white dress into a black dress.",
         "tar_desc": "The image depicts a young woman standing amidst a vibrant backdrop of pink bougainvillea flowers. She is wearing a black dress adorned with white floral patterns, which contrasts beautifully with the bright colors of the flowers. Her hair is styled in a sleek, straight manner, and she has a subtle smile on her face. The lighting is soft and natural, suggesting that the photo was taken outdoors during the daytime. The overall mood of the image is serene and elegant, with the woman appearing relaxed and at ease in her surroundings."
+    },
+    {
+        "img_id": "_ysU7TqBiZI",
+        "edit_prompt": "Change a white vest into white short sleeves.",
+        "tar_desc": "The image depicts a minimalist indoor setting with a focus on a white vest hanging on a wooden hanger. The vest is plain and lacks any visible patterns or embellishments, emphasizing its simplicity and clean design. The hanger is made of light-colored wood, complementing the white of the vest. In the background, there is a hint of a dark-colored tripod stand, suggesting the presence of a camera or similar equipment. To the right, a portion of a green plant is visible, adding a touch of nature to the scene. The lighting is soft and diffused, casting gentle shadows and highlighting the textures of the materials. The overall mood is calm and serene, with a neutral color palette that enhances the minimalist aesthetic."
+    },
+    {
+        "img_id": "_YTj2yKHyrE",
+        "edit_prompt": "Remove the child from the halo.",
+        "tar_desc": "The image captures a dynamic and visually striking scene set against a starry night sky. At the center of the composition is a circular object emitting a bright, glowing ring of light, which radiates outward in a series of thin, wispy trails. These trails create an intricate pattern that resembles a halo or a burst of energy, with the light fading as it extends outward. The circular object appears to be made of metal, reflecting the light and adding to the intensity of the display.\n\nThe background features a dark, open road that stretches into the distance, with a few scattered lights visible in the far background. The road is flanked by a line of trees, which are silhouetted against the night sky. The overall mood of the image is one of wonder and awe, as the viewer is drawn into the captivating light display and the vast, open space surrounding it."
+    },
+    {
+        "img_id": "_Yv4x4E9Iec",
+        "edit_prompt": "Remove the smoking man in the lower right corner of the picture.",
+        "tar_desc": "The image depicts an outdoor urban setting with a paved walkway. The ground is composed of rectangular stone tiles arranged in a herringbone pattern, creating a textured surface. A narrow strip of smaller, darker tiles borders the main path, providing a visual guide. Shadows from nearby trees cast intricate patterns across the pavement, suggesting a sunny day. In the upper right corner, a street sign reads \"An der Kreuzkirche,\" indicating the location. The sign is mounted on a metal pole, which also supports a streetlight fixture. The surrounding area includes a small patch of greenery, partially obscured by the signpost. The overall atmosphere is calm and orderly, typical of a city environment."
+    },
+    {
+        "img_id": "_YZ2aZ9wzds",
+        "edit_prompt": "Remove the person in the road.",
+        "tar_desc": "The image depicts a serene, foggy road stretching into the distance, flanked by tall trees on both sides. The road is marked with white dashed lines, indicating it is a two-lane highway. Street lamps line the left side, their metal poles standing stark against the misty backdrop. The sky is overcast, with a soft, diffused light that creates a tranquil and somewhat mysterious atmosphere. The trees are dense, their leaves partially obscured by the fog, adding to the sense of depth and distance. The overall mood is calm and contemplative, with a hint of solitude."
+    },
+    {
+        "img_id": "_yZXNp4aeB0",
+        "edit_prompt": "Add a fish.",
+        "tar_desc": "The image captures a serene underwater scene featuring a large jellyfish with a translucent, creamy yellow bell and delicate tentacles adorned with small, round, blue and white dots. The jellyfish is positioned centrally, with its bell slightly tilted to the right, creating a sense of movement. In the upper left corner, a small, vibrant orange fish with a yellow tail swims gracefully, adding a pop of color to the deep blue background. The lighting is soft, casting gentle shadows that enhance the jellyfish's ethereal appearance. The overall mood is tranquil and otherworldly, evoking the mystery of the ocean depths."
+    },
+    {
+        "img_id": "_z4a_UNULow",
+        "edit_prompt": "Change medicinal materials to tea.",
+        "tar_desc": "The image presents a collection of glass jars arranged in a grid pattern, each containing different types of spices and herbs. The jars vary in size and shape, with some being square and others round. The contents range from whole spices like cloves and cinnamon sticks to ground spices like coffee or cocoa powder. The colors of the spices are diverse, including browns, reds, and yellows, with some jars containing white substances like salt or sugar. The arrangement is symmetrical, with the jars evenly spaced and aligned in rows and columns. The background is dark, which contrasts with the bright colors of the spices, making them stand out prominently. The overall mood is one of organization and preparation, suggesting a setting where these ingredients are used for cooking or medicinal purposes."
+    },
+    {
+        "img_id": "_Z4YY5OzjwQ",
+        "edit_prompt": "Remove children from the house.",
+        "tar_desc": "The image depicts a serene riverside setting with a focus on a small wooden structure painted in a light turquoise hue. Adjacent to the building, a vibrant blue tarp is stretched over a yellow boat, which is moored to the shore. The boat's interior is partially visible, suggesting a functional space for fishing or transportation. The surrounding environment is lush, with dense green foliage and rocky outcrops lining the water's edge. The water is calm, reflecting the tranquility of the scene. The overall mood is peaceful and rustic, evoking a sense of simplicity and connection to nature."
+    },
+    {
+        "img_id": "_z9F13chk5U",
+        "edit_prompt": "Transform corn kernels into grapes.",
+        "tar_desc": "The image depicts a close-up view of three bowls filled with different types of fruit. The bowl in the foreground contains green grapes, which are round and have a smooth, shiny surface. The grapes are tightly packed, and their color ranges from light to dark green. The bowl in the background on the left is filled with dark purple grapes, which have a more matte finish and a deep, rich hue. The bowl on the right contains black grapes, which are also glossy and have a deep, almost black color. The lighting in the image is soft and diffused, casting gentle shadows and highlighting the textures of the fruits. The overall mood of the image is calm and inviting, with a focus on the natural beauty of the fruit."
+    },
+    {
+        "img_id": "_ZBekGTBh-c",
+        "edit_prompt": "Add aircraft.",
+        "tar_desc": "The image depicts a vibrant cityscape during what appears to be either sunrise or sunset, with the sun casting a warm glow over the skyline. The sky is a gradient of soft blues transitioning to warmer hues near the horizon. In the foreground, there is a lush green area with trees and a pathway, suggesting a park or recreational space. A river meanders through the scene, reflecting the light and adding a serene element to the urban environment. The city is composed of a variety of high-rise buildings, some under construction, indicating ongoing development. The architecture includes modern glass structures and more traditional designs, creating a dynamic skyline. An airplane is visible in the sky, adding a sense of movement and scale to the scene. The overall mood is peaceful and inviting, with the natural elements complementing the bustling city life."
+    },
+    {
+        "img_id": "_zd5Lqg6qwc",
+        "edit_prompt": "Change blue and white plaid top to black top.",
+        "tar_desc": "The image depicts a young woman sitting on a large rock in an outdoor setting. She is wearing a black crop top and blue ripped jeans, with her hair styled in loose waves. The background is filled with lush greenery, suggesting a park or garden environment. Sunlight filters through the leaves, creating a dappled effect on the scene. The woman's pose is relaxed, with one hand resting on her head and the other on her thigh, exuding a casual and confident demeanor. Her expression is neutral, with a hint of contemplation. The overall mood of the image is serene and natural, enhanced by the soft lighting and vibrant colors."
+    },
+    {
+        "img_id": "_Zd6COnH5E8",
+        "edit_prompt": "Alter the shape of the puppet.",
+        "tar_desc": "The image depicts a wooden mannequin with a smooth, polished surface, showcasing a natural wood finish. The mannequin is composed of several rounded joints and segments, allowing for a range of motion. Its head is a simple, rounded shape, while the torso is slightly larger and more defined, with a central circular feature that could represent a chest or stomach area. The arms are slender and jointed, with the hands appearing as small, rounded spheres. The legs are similarly jointed, with the feet being slightly broader and flat, providing stability. The overall design is minimalist, emphasizing functionality and form over intricate details. The background is a soft, neutral tone, which contrasts with the warm hue of the mannequin, highlighting its features."
+    },
+    {
+        "img_id": "_zE8k4OKN2E",
+        "edit_prompt": "Remove headphones.",
+        "tar_desc": "The image depicts an individual seated at a desk, engaged with a computer screen. The person is silhouetted against a bright background, likely a window, which allows natural light to illuminate the scene. The individual appears focused, with their head slightly tilted downward, suggesting concentration on the task at hand. The desk is cluttered with various items, including a laptop, a keyboard, and what seems to be a mouse. The chair is modern, with a sleek design, and the person is wearing a dark-colored jacket, which contrasts with the lighter background. The overall atmosphere is one of a professional workspace, with a sense of quiet productivity."
+    },
+    {
+        "img_id": "_zGIDjka8Nw",
+        "edit_prompt": "Erase graffiti.",
+        "tar_desc": "The image depicts a section of a wall with a distinct transition between two materials. The upper portion is covered in a smooth, off-white plaster or stucco, exhibiting a slightly textured surface with minor imperfections and stains. Below this, a row of bricks is visible, showcasing a variety of colors including reds, browns, and grays, with some bricks showing signs of weathering and discoloration. The bricks are laid in a horizontal pattern, and their edges are uneven, suggesting age and exposure to the elements. The ground in front of the wall is paved with large, flat stones, some of which show wear and discoloration. The overall setting appears to be outdoors, possibly in an urban or historical environment, given the aged appearance of the materials."
+    },
+    {
+        "img_id": "_zk8viXNt-I",
+        "edit_prompt": "Convert toys into lighters.",
+        "tar_desc": "The image depicts a close-up view of a hand holding a black rectangular object with a metallic top. The object appears to be a lighter, characterized by its sleek, modern design and the presence of a flame at the top. The hand is positioned in the center of the frame, with fingers gently grasping the lighter, which is oriented vertically. The background is a plain, light-colored wall, providing a neutral backdrop that highlights the object. The lighting is soft and even, casting subtle shadows that accentuate the texture of the lighter's surface. The overall mood is calm and focused, emphasizing the simplicity and functionality of the object."
+    },
+    {
+        "img_id": "_ZkEMWj__2U",
+        "edit_prompt": "Modify earrings.",
+        "tar_desc": "The image captures a close-up view of a woman with her head turned slightly to the side, showcasing her profile. She has light brown hair styled in a loose, casual manner, with some strands gently framing her face. Her eyes are a striking shade of green, accentuated by dark eyeliner and mascara, giving her a focused and contemplative expression. She is wearing a white turtleneck sweater, which contrasts with her fair skin and complements her overall appearance.\n\nHer most prominent accessory is a pair of gold earrings that dangle elegantly from her ears. The earrings feature a circular design with a tassel-like element hanging from the bottom, adding a touch of sophistication to her look. The gold color of the earrings stands out against her skin tone, drawing attention to her face.\n\nThe background is blurred, but it appears to be an outdoor setting with soft, natural lighting. The focus is primarily on the woman, with the background elements providing a sense of depth and context without distracting from the main subject. The overall mood of the image is serene and introspective, with a soft, warm tone that enhances the visual appeal of the scene."
+    },
+    {
+        "img_id": "_Zn_7FzoL1w",
+        "edit_prompt": "Switch fruit slices to bananas.",
+        "tar_desc": "The image presents a visually appealing still life composition set against a textured blue background. At the center, a light blue ceramic plate with a scalloped edge holds a cluster of ripe bananas, their yellow hue contrasting with the cool tones of the plate. Scattered around the plate are several chocolate bars, their dark brown color adding a rich contrast to the scene. A peeled banana lies beside the plate, its yellow peel partially open, revealing the creamy interior. \n\nThe setting is an indoor environment, suggested by the soft, diffused lighting that casts gentle shadows and highlights the textures of the objects. The background features a textured blue surface, possibly a table or countertop, with a few scattered yellow rose petals, adding a touch of natural beauty and color variation. A white cloth napkin is partially visible beneath the plate, contributing to the overall composition's balance and depth.\n\nIn terms of objects, the bananas are the focal point, their curved shapes and vibrant color drawing the viewer's eye. The chocolate bars are placed strategically around the plate, creating a sense of abundance and indulgence. The banana peel and the peeled banana introduce a sense of casualness and informality, suggesting a moment of relaxation or preparation for a snack. The rose petals introduce an element of elegance and softness, enhancing the overall aesthetic appeal of the scene."
+    },
+    {
+        "img_id": "_ZO2obWfpFQ",
+        "edit_prompt": "Remove people.",
+        "tar_desc": "The image depicts a serene mountainous landscape with a foreground of rugged rocks. The rocks are predominantly gray, with patches of moss and lichen adding subtle green and orange hues. In the background, snow-covered peaks rise majestically, their white surfaces contrasting sharply with the darker rock formations. The sky is overcast, casting a soft, diffused light that enhances the tranquil atmosphere. The overall mood is one of quiet contemplation, inviting the viewer to immerse themselves in the natural beauty of the scene."
     }
 ]
